@@ -2,11 +2,14 @@ services:
   - type: web
     name: genius-vendas-api
     runtime: docker
+    plan: free
     dockerfilePath: ./Dockerfile
     healthCheckPath: /health
+
     envVars:
       - key: ASPNETCORE_ENVIRONMENT
         value: Production
+
       - key: DATABASE_URL
         fromDatabase:
           name: genius-vendas-db
@@ -14,5 +17,6 @@ services:
 
 databases:
   - name: genius-vendas-db
+    plan: free
     databaseName: genius_vendas
     user: genius_vendas
