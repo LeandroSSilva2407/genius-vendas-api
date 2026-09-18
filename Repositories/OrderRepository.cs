@@ -1,10 +1,6 @@
 using GeniusVendas.Api.Data; using GeniusVendas.Api.Models; using Npgsql;
 namespace GeniusVendas.Api.Repositories;
 
-public sealed record OrderPaymentRequest(
-    string Species,
-    decimal Value);
-
 public sealed class OrderRepository
 {
  private readonly DatabaseConnectionFactory _factory; public OrderRepository(DatabaseConnectionFactory factory)=>_factory=factory;
