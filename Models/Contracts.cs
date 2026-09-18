@@ -91,7 +91,8 @@ public sealed record PendingOrderDto(
     string SellerCode,
     DateTime OrderDateUtc,
     decimal Total,
-    IReadOnlyList<OrderItemResponse> Items);
+    IReadOnlyList<OrderItemResponse> Items,
+    IReadOnlyList<OrderPaymentResponse> Payments);
 
 public sealed record CompleteOrderRequest(
     string GdoorOrderNumber);
