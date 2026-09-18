@@ -1,9 +1,284 @@
 using GeniusVendas.Api.Data; using GeniusVendas.Api.Models; using Npgsql;
 namespace GeniusVendas.Api.Repositories;
+
+public sealed record OrderPaymentRequest(
+    string Species,
+    decimal Value);
+
 public sealed class OrderRepository
 {
  private readonly DatabaseConnectionFactory _factory; public OrderRepository(DatabaseConnectionFactory factory)=>_factory=factory;
- public async Task<CreateOrderResponse> CreateAsync(SessionInfo session,long customerId,IReadOnlyList<OrderItemResponse> items,CancellationToken ct){await using var c=_factory.Create();await c.OpenAsync(ct);await using var tx=await c.BeginTransactionAsync(ct);var external=Guid.NewGuid();var total=items.Sum(x=>x.Total);long orderId;await using(var cmd=new NpgsqlCommand(@"INSERT INTO sales_order(company_id,external_id,customer_id,seller_id,order_date_utc,total,status) VALUES(@c,@e,@cu,@s,@d,@t,'PENDING_GDOOR') RETURNING id",c,tx)){cmd.Parameters.AddWithValue("c",session.CompanyId);cmd.Parameters.AddWithValue("e",external);cmd.Parameters.AddWithValue("cu",customerId);cmd.Parameters.AddWithValue("s",session.SellerId);cmd.Parameters.AddWithValue("d",DateTime.UtcNow);cmd.Parameters.AddWithValue("t",total);orderId=Convert.ToInt64(await cmd.ExecuteScalarAsync(ct));}foreach(var x in items){await using var pcmd=new NpgsqlCommand("SELECT id FROM product WHERE company_id=@c AND gdoor_code=@g",c,tx);pcmd.Parameters.AddWithValue("c",session.CompanyId);pcmd.Parameters.AddWithValue("g",x.ProductCode);var productId=Convert.ToInt64(await pcmd.ExecuteScalarAsync(ct));await using var cmd=new NpgsqlCommand(@"INSERT INTO sales_order_item(order_id,product_id,product_code,description,quantity,unit_price,wholesale,total) VALUES(@o,@p,@g,@d,@q,@u,@w,@t)",c,tx);cmd.Parameters.AddWithValue("o",orderId);cmd.Parameters.AddWithValue("p",productId);cmd.Parameters.AddWithValue("g",x.ProductCode);cmd.Parameters.AddWithValue("d",x.Description);cmd.Parameters.AddWithValue("q",x.Quantity);cmd.Parameters.AddWithValue("u",x.UnitPrice);cmd.Parameters.AddWithValue("w",x.Wholesale);cmd.Parameters.AddWithValue("t",x.Total);await cmd.ExecuteNonQueryAsync(ct);}await tx.CommitAsync(ct);return new CreateOrderResponse(orderId,external.ToString(),"PENDING_GDOOR",total,items);}
+ public async Task<CreateOrderResponse> CreateAsync(
+    SessionInfo session,
+    long customerId,
+    IReadOnlyList<OrderItemResponse> items,
+    IReadOnlyList<OrderPaymentRequest> payments,
+    CancellationToken ct)
+{
+    if (items is null || items.Count == 0)
+        throw new InvalidOperationException(
+            "O pedido deve possuir pelo menos um item.");
+
+    if (payments is null || payments.Count == 0)
+        throw new InvalidOperationException(
+            "O pedido deve possuir pelo menos uma forma de pagamento.");
+
+    var total = items.Sum(x => x.Total);
+
+    var paymentTotal = payments.Sum(x => x.Value);
+
+    if (Math.Abs(total - paymentTotal) > 0.01m)
+    {
+        throw new InvalidOperationException(
+            $"A soma dos pagamentos ({paymentTotal:N2}) " +
+            $"difere do total do pedido ({total:N2}).");
+    }
+
+    foreach (var payment in payments)
+    {
+        if (string.IsNullOrWhiteSpace(payment.Species))
+        {
+            throw new InvalidOperationException(
+                "Existe pagamento sem espécie informada.");
+        }
+
+        if (payment.Value <= 0)
+        {
+            throw new InvalidOperationException(
+                $"Valor inválido para a forma de pagamento " +
+                $"'{payment.Species}'.");
+        }
+    }
+
+    await using var c = _factory.Create();
+    await c.OpenAsync(ct);
+
+    await using var tx =
+        await c.BeginTransactionAsync(ct);
+
+    try
+    {
+        var external = Guid.NewGuid();
+        long orderId;
+
+        // -------------------------------------------------
+        // CABEÇALHO
+        // -------------------------------------------------
+
+        await using (var cmd = new NpgsqlCommand(
+            """
+            INSERT INTO sales_order
+            (
+                company_id,
+                external_id,
+                customer_id,
+                seller_id,
+                order_date_utc,
+                total,
+                status
+            )
+            VALUES
+            (
+                @c,
+                @e,
+                @cu,
+                @s,
+                @d,
+                @t,
+                'PENDING_GDOOR'
+            )
+            RETURNING id
+            """,
+            c,
+            tx))
+        {
+            cmd.Parameters.AddWithValue(
+                "c",
+                session.CompanyId);
+
+            cmd.Parameters.AddWithValue(
+                "e",
+                external);
+
+            cmd.Parameters.AddWithValue(
+                "cu",
+                customerId);
+
+            cmd.Parameters.AddWithValue(
+                "s",
+                session.SellerId);
+
+            cmd.Parameters.AddWithValue(
+                "d",
+                DateTime.UtcNow);
+
+            cmd.Parameters.AddWithValue(
+                "t",
+                total);
+
+            orderId =
+                Convert.ToInt64(
+                    await cmd.ExecuteScalarAsync(ct));
+        }
+
+        // -------------------------------------------------
+        // ITENS
+        // -------------------------------------------------
+
+        foreach (var x in items)
+        {
+            long productId;
+
+            await using (var pcmd = new NpgsqlCommand(
+                """
+                SELECT id
+                FROM product
+                WHERE company_id = @c
+                  AND gdoor_code = @g
+                """,
+                c,
+                tx))
+            {
+                pcmd.Parameters.AddWithValue(
+                    "c",
+                    session.CompanyId);
+
+                pcmd.Parameters.AddWithValue(
+                    "g",
+                    x.ProductCode);
+
+                var result =
+                    await pcmd.ExecuteScalarAsync(ct);
+
+                if (result is null ||
+                    result == DBNull.Value)
+                {
+                    throw new InvalidOperationException(
+                        $"Produto '{x.ProductCode}' " +
+                        $"não encontrado.");
+                }
+
+                productId =
+                    Convert.ToInt64(result);
+            }
+
+            await using var cmd = new NpgsqlCommand(
+                """
+                INSERT INTO sales_order_item
+                (
+                    order_id,
+                    product_id,
+                    product_code,
+                    description,
+                    quantity,
+                    unit_price,
+                    wholesale,
+                    total
+                )
+                VALUES
+                (
+                    @o,
+                    @p,
+                    @g,
+                    @d,
+                    @q,
+                    @u,
+                    @w,
+                    @t
+                )
+                """,
+                c,
+                tx);
+
+            cmd.Parameters.AddWithValue(
+                "o",
+                orderId);
+
+            cmd.Parameters.AddWithValue(
+                "p",
+                productId);
+
+            cmd.Parameters.AddWithValue(
+                "g",
+                x.ProductCode);
+
+            cmd.Parameters.AddWithValue(
+                "d",
+                x.Description);
+
+            cmd.Parameters.AddWithValue(
+                "q",
+                x.Quantity);
+
+            cmd.Parameters.AddWithValue(
+                "u",
+                x.UnitPrice);
+
+            cmd.Parameters.AddWithValue(
+                "w",
+                x.Wholesale);
+
+            cmd.Parameters.AddWithValue(
+                "t",
+                x.Total);
+
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+
+        // -------------------------------------------------
+        // PAGAMENTOS
+        // -------------------------------------------------
+
+        foreach (var payment in payments)
+        {
+            await using var cmd = new NpgsqlCommand(
+                """
+                INSERT INTO sales_order_payment
+                (
+                    order_id,
+                    species,
+                    value
+                )
+                VALUES
+                (
+                    @o,
+                    @s,
+                    @v
+                )
+                """,
+                c,
+                tx);
+
+            cmd.Parameters.AddWithValue(
+                "o",
+                orderId);
+
+            cmd.Parameters.AddWithValue(
+                "s",
+                payment.Species.Trim());
+
+            cmd.Parameters.AddWithValue(
+                "v",
+                payment.Value);
+
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+
+        await tx.CommitAsync(ct);
+
+        return new CreateOrderResponse(
+            orderId,
+            external.ToString(),
+            "PENDING_GDOOR",
+            total,
+            items);
+    }
+    catch
+    {
+        await tx.RollbackAsync(ct);
+        throw;
+    }
+}
  public async Task<IReadOnlyList<PendingOrderDto>> GetPendingAsync(
     long companyId,
     CancellationToken ct)
