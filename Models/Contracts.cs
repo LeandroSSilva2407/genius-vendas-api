@@ -98,3 +98,7 @@ public sealed record CompleteOrderRequest(
 
 public sealed record FailOrderRequest(
     string ErrorMessage);
+
+public sealed record OrderPaymentResponse(
+    string Species,
+    decimal Value);
