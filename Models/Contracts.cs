@@ -30,6 +30,10 @@ public sealed record CreateOrderRequest(
     IReadOnlyList<OrderItemRequest> Items,
     IReadOnlyList<OrderPaymentRequest> Payments);
 
+public sealed record OrderPaymentRequest(
+    string Species,
+    decimal Value);
+
 public sealed record OrderItemResponse(
     string ProductCode,
     string Description,
