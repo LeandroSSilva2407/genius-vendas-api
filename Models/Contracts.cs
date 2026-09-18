@@ -27,7 +27,8 @@ public sealed record OrderItemRequest(string ProductCode, decimal Quantity);
 
 public sealed record CreateOrderRequest(
     string CustomerCode,
-    IReadOnlyList<OrderItemRequest> Items);
+    IReadOnlyList<OrderItemRequest> Items,
+    IReadOnlyList<OrderPaymentRequest> Payments);
 
 public sealed record OrderItemResponse(
     string ProductCode,
