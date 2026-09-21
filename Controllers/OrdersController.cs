@@ -25,4 +25,39 @@ public sealed class OrdersController:ControllerBase
     req.Payments,
     ct));}
  [HttpGet("mine")] public async Task<IActionResult> Mine([FromServices]OrderRepository orders,CancellationToken ct){var s=(SessionInfo)HttpContext.Items["Session"]!;return Ok(await orders.GetBySellerAsync(s,ct));}
+ /// <summary>
+/// Recoloca um pedido com erro na fila de transmissão para o GDOOR.
+/// </summary>
+[HttpPost("{id:int}/retry")]
+public async Task<IActionResult> ReenviarAsync(
+    int id,
+    [FromServices] OrderRepository pedidos,
+    CancellationToken cancellationToken)
+{
+    var sessao = HttpContext.Items["Session"] as SessionInfo;
+
+    if (sessao is null)
+        return Unauthorized();
+
+    var reenviado = await pedidos.ReenviarAsync(
+        id,
+        sessao.CompanyId,
+        sessao.SellerId,
+        cancellationToken);
+
+    if (!reenviado)
+    {
+        return BadRequest(new
+        {
+            mensagem =
+                "O pedido não foi encontrado ou não está disponível para reenvio."
+        });
+    }
+
+    return Ok(new
+    {
+        pedidoId = id,
+        mensagem = "Pedido colocado novamente na fila de transmissão."
+    });
+}
 }
