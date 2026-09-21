@@ -434,8 +434,8 @@ public sealed class OrderRepository
  public async Task<IReadOnlyList<OrderStatusDto>> GetBySellerAsync(SessionInfo s,CancellationToken ct){var list=new List<OrderStatusDto>();await using var c=_factory.Create();await c.OpenAsync(ct);await using var cmd=new NpgsqlCommand(@"SELECT id,external_id::text,status,gdoor_order_number,error_message,total,order_date_utc,sent_to_gdoor_at_utc FROM sales_order WHERE company_id=@c AND seller_id=@s ORDER BY id DESC LIMIT 100",c);cmd.Parameters.AddWithValue("c",s.CompanyId);cmd.Parameters.AddWithValue("s",s.SellerId);await using var r=await cmd.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct))list.Add(new OrderStatusDto(r.GetInt64(0),r.GetString(1),r.GetString(2),r.IsDBNull(3)?null:r.GetString(3),r.IsDBNull(4)?null:r.GetString(4),r.GetDecimal(5),r.GetDateTime(6),r.IsDBNull(7)?null:r.GetDateTime(7)));return list;}
  public async Task<bool> ReenviarAsync(
     int pedidoId,
-    int empresaId,
-    int vendedorId,
+    long empresaId,
+    long vendedorId,
     CancellationToken cancellationToken)
 {
     await using var conexao = _factory.Create();
