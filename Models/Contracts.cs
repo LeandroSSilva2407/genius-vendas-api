@@ -129,3 +129,20 @@ public sealed class ProdutoVendaDto
 
         public DateTime? AtualizadoEmUtc { get; set; }
     }
+
+
+/// <summary>
+    /// Representa um cliente disponível para seleção no aplicativo.
+    /// </summary>
+    public sealed class ClienteVendaDto
+    {
+        public int Id { get; set; }
+
+        public string Codigo { get; set; } = string.Empty;
+
+        public string Nome { get; set; } = string.Empty;
+
+        public string? Documento { get; set; }
+
+        public DateTime? AtualizadoEmUtc { get; set; }
+    }
