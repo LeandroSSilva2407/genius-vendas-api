@@ -432,4 +432,33 @@ public sealed class OrderRepository
  public async Task CompleteAsync(long companyId,long orderId,string gdoorNumber,CancellationToken ct){await using var c=_factory.Create();await c.OpenAsync(ct);await using var cmd=new NpgsqlCommand("UPDATE sales_order SET status='TRANSMITTED_GDOOR',gdoor_order_number=@g,sent_to_gdoor_at_utc=(now() at time zone 'utc'),error_message=NULL WHERE id=@i AND company_id=@c",c);cmd.Parameters.AddWithValue("g",gdoorNumber);cmd.Parameters.AddWithValue("i",orderId);cmd.Parameters.AddWithValue("c",companyId);await cmd.ExecuteNonQueryAsync(ct);}
  public async Task FailAsync(long companyId,long orderId,string error,CancellationToken ct){await using var c=_factory.Create();await c.OpenAsync(ct);await using var cmd=new NpgsqlCommand("UPDATE sales_order SET status='ERROR_GDOOR',error_message=@e WHERE id=@i AND company_id=@c",c);cmd.Parameters.AddWithValue("e",error);cmd.Parameters.AddWithValue("i",orderId);cmd.Parameters.AddWithValue("c",companyId);await cmd.ExecuteNonQueryAsync(ct);}
  public async Task<IReadOnlyList<OrderStatusDto>> GetBySellerAsync(SessionInfo s,CancellationToken ct){var list=new List<OrderStatusDto>();await using var c=_factory.Create();await c.OpenAsync(ct);await using var cmd=new NpgsqlCommand(@"SELECT id,external_id::text,status,gdoor_order_number,error_message,total,order_date_utc,sent_to_gdoor_at_utc FROM sales_order WHERE company_id=@c AND seller_id=@s ORDER BY id DESC LIMIT 100",c);cmd.Parameters.AddWithValue("c",s.CompanyId);cmd.Parameters.AddWithValue("s",s.SellerId);await using var r=await cmd.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct))list.Add(new OrderStatusDto(r.GetInt64(0),r.GetString(1),r.GetString(2),r.IsDBNull(3)?null:r.GetString(3),r.IsDBNull(4)?null:r.GetString(4),r.GetDecimal(5),r.GetDateTime(6),r.IsDBNull(7)?null:r.GetDateTime(7)));return list;}
+ public async Task<bool> ReenviarAsync(
+    int pedidoId,
+    int empresaId,
+    int vendedorId,
+    CancellationToken cancellationToken)
+{
+    await using var conexao = _factory.Create();
+    await conexao.OpenAsync(cancellationToken);
+
+    const string sql = """
+        UPDATE sales_order
+        SET status = 'PENDING_GDOOR'
+        WHERE id = @pedidoId
+          AND company_id = @empresaId
+          AND seller_id = @vendedorId
+          AND status = 'ERROR_GDOOR';
+        """;
+
+    await using var comando = new NpgsqlCommand(sql, conexao);
+
+    comando.Parameters.AddWithValue("@pedidoId", pedidoId);
+    comando.Parameters.AddWithValue("@empresaId", empresaId);
+    comando.Parameters.AddWithValue("@vendedorId", vendedorId);
+
+    var registros =
+        await comando.ExecuteNonQueryAsync(cancellationToken);
+
+    return registros > 0;
+}
 }
