@@ -108,3 +108,24 @@ public sealed record FailOrderRequest(
 public sealed record OrderPaymentResponse(
     string Species,
     decimal Value);
+
+public sealed class ProdutoVendaDto
+    {
+        public int Id { get; set; }
+
+        public string Codigo { get; set; } = string.Empty;
+
+        public string? CodigoBarras { get; set; }
+
+        public string Descricao { get; set; } = string.Empty;
+
+        public decimal PrecoVarejo { get; set; }
+
+        public decimal PrecoAtacado { get; set; }
+
+        public decimal QuantidadeMinimaAtacado { get; set; }
+
+        public decimal Estoque { get; set; }
+
+        public DateTime? AtualizadoEmUtc { get; set; }
+    }
