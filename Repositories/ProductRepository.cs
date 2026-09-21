@@ -7,7 +7,7 @@ public sealed class ProductRepository
  public async Task<ProductDto?> GetByCodeAsync(long companyId,string code,CancellationToken ct){await using var c=_factory.Create();await c.OpenAsync(ct);await using var cmd=new NpgsqlCommand(@"SELECT id,gdoor_code,barcode,description,retail_price,wholesale_price,wholesale_min_qty,stock,active,updated_at_utc FROM product WHERE company_id=@c AND gdoor_code=@g AND active=true",c);cmd.Parameters.AddWithValue("c",companyId);cmd.Parameters.AddWithValue("g",code);await using var r=await cmd.ExecuteReaderAsync(ct);return await r.ReadAsync(ct)?Map(r):null;}
  private static ProductDto Map(NpgsqlDataReader r)=>new(r.GetInt64(0),r.GetString(1),r.GetString(2),r.GetString(3),r.GetDecimal(4),r.GetDecimal(5),r.GetDecimal(6),r.GetDecimal(7),r.GetBoolean(8),r.GetDateTime(9));
  public async Task<IReadOnlyList<ProdutoVendaDto>> ListarParaVendaAsync(
-    int empresaId,
+    long empresaId,
     string? pesquisa,
     int pagina,
     int quantidadePorPagina,
@@ -112,7 +112,7 @@ public sealed class ProductRepository
 }
 
  public async Task<ProdutoVendaDto?> ObterParaVendaPorCodigoAsync(
-    int empresaId,
+    long empresaId,
     string codigo,
     CancellationToken cancellationToken)
 {
