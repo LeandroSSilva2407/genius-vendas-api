@@ -86,7 +86,7 @@ public sealed class CustomerRepository
     return clientes;
 }
 public async Task<ClienteVendaDto?> ObterParaVendaPorCodigoAsync(
-    int empresaId,
+    long empresaId,
     string codigo,
     CancellationToken cancellationToken)
 {
